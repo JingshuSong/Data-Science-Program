@@ -1,0 +1,195 @@
+---
+title: "DATS6101 Project2 - Titanic"
+author: "Jingshu Song"
+date: "2018/12/2"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("/Users/isthatyoung/DATS6101-Project2")
+```
+# Library
+```{r warning=FALSE,message=FALSE}
+library(dplyr)
+library(ResourceSelection)
+library(pROC)
+library(ISLR)
+library(dplyr)
+library(ROCR)
+library(bestglm)
+library(forcats)
+library(leaps)
+library(ggplot2)
+```
+# Question design
+No doubt the Titanic sank in the North Atlantic Ocean in 1912 is a big disaster, many passengers lost their life on board the Titanic, but some of them were susrvived miraculously. So we design the question on how to analyze the factors lead to the survive/loss of passenger based on their information.
+
+# Data
+Our data is from Kaggle.\begin{itshape} Titanic: Machine Learning from Disaster \end{itshape} 
+Data source: https://www.kaggle.com/c/titanic
+
+# Data cleansing
+```{r}
+train=read.csv('train.csv')
+str(train)
+summary(train)
+dim(train)
+str(train)
+sum(factor(train$Cabin) == levels(train$Cabin)[1])/length(train$Cabin)
+sum(factor(train$Embarked) == levels(train$Embarked)[1])/length(train$Embarked)
+sapply(train,function(x) sum(is.na(x))/length(x))
+```
+The dataset contains 891 observations and 12 variable, next we need to replace the NA in variables.
+
+## Replacing NA in $Age$
+We use mean of $Age$ to replace the NA in $Age$.
+```{r}
+train$Age <- ifelse(is.na(train$Age),mean(train$Age,na.rm = TRUE), train$Age)
+```
+
+## Replacing NA in $Cabin$
+Because the percentage of NA in $cabin$ is to high which means there is a lot of missing value in $cabin$, and the variable $cabin$ is the cabin number which we think has least importance so we just drop the $Cabin$ from our dataset.
+```{r}
+train$Cabin <- NULL
+```
+
+## Replacing NA in $Embarked$
+Because the percentage of NA in $Embarked$ is low so we could use other level in $Embarked$ to replace the missing value. "S" has the highest frequency in our data so we use "S" to replace NA. 
+```{r}
+summary(train$Embarked)
+train$Embarked <- replace(train$Embarked,which(train$Embarked==levels(train$Embarked)[1]),'S')
+train$Embarked <- factor(train$Embarked)
+levels(train$Embarked)
+```
+After replacing the NA in our data, we need to combine some of the variables.\newline
+First, we learn from the dataset that $SibSp$ and $Parch$ are both the family members who were abroad the Titanic related to this passenger, so we could combine $SibSp$ and $Parch$ together to calculate the total family member of this passenger.
+```{r}
+train$FamilyMember <- train$SibSp+train$Parch
+str(train)
+```
+Then we could change the continuous variable $FamilyMember$ to discrete $FamilySize$ by classifying them into 'Single', 'Small', 'Big'.\newline
+We assume 'Single' is that the passenger did not have other family member on Titanic; 'Small' is that the passenger had his/her wife/husband or one child on Titanic, or had his/her father and mother on Titanic; 'Big' is that the passenger had 3 or more family member on Titanic.
+```{r}
+train$FamilySize[train$FamilyMember == 0] <- 'Single'
+train$FamilySize[train$FamilyMember >=1 & train$FamilyMember <=2] <-'Small'
+train$FamilySize[train$FamilyMember >=3] <- 'Big'
+train$FamilySize <-as.factor(train$FamilySize)
+summary(train$FamilySize)
+
+```
+Next, we change the continuous variable $Age$ to discrete $AgeGroup$ by classifying them into 'Child', 'Juvenile', 'Youth', 'MiddleAge', 'Senium'.\newline
+We define 'Child' as 0-6 years, 'Juvenile' as 7 to 17 years, 'Youth' as 18 to 40 years, 'MiddleAge' as 41 to 65 years, 'Senium' as more than 65 years. 
+```{r}
+train$AgeGroup[train$Age<=6] <- 'Child'
+train$AgeGroup[train$Age>=7 & train$Age<=17] <- 'Juvenile'
+train$AgeGroup[train$Age>=18 & train$Age<=40] <- 'Youth'
+train$AgeGroup[train$Age>=40.5 & train$Age<=65] <- 'MiddleAge'
+train$AgeGroup[train$Age>=66] <- 'Senium'
+train$AgeGroup <- as.factor(train$AgeGroup)
+levels(train$AgeGroup)
+summary(train$AgeGroup)
+```
+# EDA 
+## Correlation
+We seperate the train from the whole dataset first.
+```{r}
+pairs(~Pclass+Sex+Age+FamilyMember+Fare+Embarked, data=train,panel=panel.smooth)
+cor(train$Survived,train$Age)
+cor(train$Survived,train$Fare)
+```
+The correlation between each variable shows that 
+1. $Fare$ has relationship with $Pclass$.
+2. $Age$ has relationship with $Survived$.
+3. $Fare$ has relationship with $Survived$.
+
+## Histogram by group
+```{r}
+par(mfrow=c(1,3))
+data_class1 <- subset(train, Pclass==1)
+hist(data_class1$Survived)
+data_class2 <- subset(train, Pclass==2)
+hist(data_class2$Survived)
+data_class3 <- subset(train, Pclass==3)
+hist(data_class3$Survived)
+par(mfrow=c(1,2))
+data_female <- subset(train, Sex=='female')
+hist(data_female$Survived)
+data_male <- subset(train, Sex=='male')
+hist(data_male$Survived)
+par(mfrow=c(2,3))
+data_child <- subset(train, AgeGroup=='Child')
+hist(data_child$Survived)
+data_Juvenile <- subset(train, AgeGroup=='Juvenile')
+hist(data_Juvenile$Survived)
+data_Youth <- subset(train, AgeGroup=='Youth')
+hist(data_Youth$Survived)
+data_MiddleAge <- subset(train, AgeGroup=='MiddleAge')
+hist(data_Juvenile$Survived)
+data_Senium <- subset(train, AgeGroup=='Senium')
+hist(data_Senium$Survived)
+par(mfrow=c(1,3))
+data_Embarked_C <- subset(train, Embarked=='C')
+hist(data_Embarked_C$Survived)
+data_Embarked_Q <- subset(train, Embarked=='Q')
+hist(data_Embarked_Q$Survived)
+data_Embarked_S <- subset(train, Embarked=='S')
+hist(data_Embarked_S$Survived)
+```
+From the figure we could have a first impression that \newline
+1. The passengers in class 1 are more likely to survive. The passengers in class 3 are unlikely to survive. \newline
+2. The passengers who are female are more likely to survive. \newline
+3. The passengers who are child are more likely to survive, and the Senium passengers are unlikely to survive.
+# Model building
+## Initial model
+After EDA, we decide to use $Sex$, $AgeGroup$, $Familysize$, $Pclass$, $Embarked$ as independent variables, $Survived$ as our dependent variable. 
+$Survived$ is factor variable, it has level 0 and 1, 0 means loss, 1 means survive. We have 549 loss samples, 342 survive samoles in our dataset.
+$Pclass$ is factor variable, it has level 1, 2, 3. 1 means first class, 2 means second class, 3 means thrid class. First class is the highest cabin.
+```{r}
+initial.model <- glm(Survived ~ Sex+AgeGroup+FamilySize+Pclass+Embarked,family="binomial"(link = "logit"),train)
+summary(initial.model)
+exp(coef(initial.model))
+```
+From the summary of our initial model, we assume that male passenger, $AgeGroup$ of Juvenile, $AgeGroup$ of MiddleAge, $AgeGroup$ of Senium, $AgeGroup$ of Youth, $FamilySize$ of single, $FamilySize$ of small, $Pclass$ of 2 and 3 have significant statistic with $Survived$.
+
+## Train
+So we finally select $Sex$, $AgeGroup$, $FamilySize$, $Pclass$ as our independent variable. \newline
+We seperate the train.csv dataset into 80% subtrain and 20% subvalidation.
+```{r}
+subtrain <- train[1:713,]
+subvalidation <- train[713:891,]
+Survived.model <- glm(Survived ~ Sex+AgeGroup+FamilySize+Pclass,family="binomial"(link = "logit"),subtrain)
+summary(Survived.model)
+exp(coef(Survived.model))
+```
+The AIC of our model is 652.72.
+
+## Test
+Next we use the remain 20% data in train dataset to test the accuracy of model.
+```{r}
+Survived.pred.model <- predict.glm(Survived.model,subvalidation,type='response')
+fitting.results <- ifelse( Survived.pred.model> 0.5,1,0)
+classification.errors <- mean(fitting.results!=subvalidation$Survived)
+print(paste('Accuracy',1-classification.errors))
+pr <- prediction(Survived.pred.model,subvalidation$Survived)
+prf <- performance(pr,measure = "tpr",x.measure = "fpr")
+par(mfrow=c(1,1))
+plot(prf)
+auc <- performance(pr,measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+From the analysis of model performance, we could reach the following conclusion: 
+1. The ROC curve looks good.\newline
+2. The classification accuracy is 83.8% which seems nice. \newline
+3. The auc is 0.88. \newline
+So we determine our model is good. 
+
+
+
+
+
+
+
+
+
