@@ -1,3 +1,6 @@
+For this project, I want to reasearch the current situation of US visa Application situation 
 
-If foreigners want to work in US legally, employers must apply visa for them, and it will take more than six months. However, the government will refuse the application sometimes. Both employees and employers waste a lot of time and money. Therefore, we would like to create model to predict visa decision based on
-the employee information.
+The goal of project:
+If foreigners want to work in US legally, employers must apply visa for them, and it will take more than six months. 
+However, the government will refuse the application sometimes. Both employees and employers waste a lot of time and money. 
+Therefore, I would like to create model to predict visa decision based on the employee information and figure out what factors contributed most to the decisions.
